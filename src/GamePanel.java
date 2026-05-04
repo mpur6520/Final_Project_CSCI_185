@@ -4,7 +4,7 @@ import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.util.ArrayList;
 
-// MAIN GAME PANEL
+// ================= MAIN GAME PANEL =================
 public class GamePanel extends JPanel implements Runnable, KeyListener {
 
     // ================= SCREEN =================
@@ -12,7 +12,12 @@ public class GamePanel extends JPanel implements Runnable, KeyListener {
     final int HEIGHT = 500;
 
     Thread gameThread;
-    JFrame window; // used for closing game on win
+    JFrame window;
+
+    // ================= SOUND =================
+    SoundPlayer sound = new SoundPlayer();
+    SoundPlayer doorSound = new SoundPlayer();
+
 
     // ================= PLAYER =================
     int playerX = 200;
@@ -50,6 +55,12 @@ public class GamePanel extends JPanel implements Runnable, KeyListener {
     int baseX = 0;
     int baseY;
 
+    // ================= TRANSITION =================
+    boolean transitioning = false;
+    int transitionAlpha = 0;
+    boolean transitionForward = false;
+    boolean transitionBackward = false;
+
     // ================= CONSTRUCTOR =================
     public GamePanel(JFrame window) {
 
@@ -63,16 +74,22 @@ public class GamePanel extends JPanel implements Runnable, KeyListener {
         loadImages();
         calculateLayout();
 
+        sound.loadFootsteps();
+        doorSound.loadFootsteps();
+
+        sound.loadFootsteps();
+        sound.loadDoorSound();
+
         AnomalyManager.generate(this, currentPeriod);
     }
 
-    // centers hallway
+    // ================= LAYOUT =================
     public void calculateLayout() {
         baseY = (HEIGHT / 2) - 50;
         playerY = baseY + 35;
     }
 
-    // load images
+    // ================= LOAD IMAGES =================
     public void loadImages() {
         try {
 
@@ -95,15 +112,11 @@ public class GamePanel extends JPanel implements Runnable, KeyListener {
 
     // ================= ANOMALY CHECK =================
     public boolean hasAnomaly() {
-
-        if (currentBase != BaseState.NORMAL) {
-            return true;
-        }
-
+        if (currentBase != BaseState.NORMAL) return true;
         return !overlays.isEmpty();
     }
 
-    // ================= GAME LOOP =================
+    // ================= START LOOP =================
     public void startGameThread() {
         gameThread = new Thread(this);
         gameThread.start();
@@ -128,6 +141,7 @@ public class GamePanel extends JPanel implements Runnable, KeyListener {
     // ================= UPDATE =================
     public void update() {
 
+        boolean wasMoving = moving;
         moving = false;
 
         if (leftPressed) {
@@ -147,6 +161,45 @@ public class GamePanel extends JPanel implements Runnable, KeyListener {
 
         nearLeftEnd = playerX <= 10;
         nearRightEnd = playerX >= 450;
+
+        // ================= FOOTSTEPS =================
+        if (moving && !wasMoving) sound.startFootsteps();
+        if (!moving && wasMoving) sound.stopFootsteps();
+
+        // ================= TRANSITION LOGIC =================
+        if (transitioning) {
+
+            transitionAlpha += 20;
+
+            if (transitionAlpha == 20) {
+                sound.playDoor();
+            }
+
+            if (transitionAlpha >= 255) {
+
+                boolean anomaly = hasAnomaly();
+
+                if (transitionForward) {
+                    currentPeriod = anomaly ? 0 : currentPeriod + 1;
+                    playerX = 20;
+                }
+
+                if (transitionBackward) {
+                    currentPeriod = anomaly ? currentPeriod + 1 : 0;
+                    playerX = 200;
+                }
+
+                AnomalyManager.generate(this, currentPeriod);
+
+                transitionForward = false;
+                transitionBackward = false;
+            }
+
+            if (transitionAlpha >= 510) {
+                transitionAlpha = 0;
+                transitioning = false;
+            }
+        }
     }
 
     // ================= DRAW =================
@@ -159,7 +212,7 @@ public class GamePanel extends JPanel implements Runnable, KeyListener {
         g.setColor(Color.BLACK);
         g.fillRect(0, 0, WIDTH, HEIGHT);
 
-        // ================= BASE RENDER =================
+        // ================= BASE =================
         Image baseToDraw = baseNormal;
 
         switch (currentBase) {
@@ -172,12 +225,12 @@ public class GamePanel extends JPanel implements Runnable, KeyListener {
 
         g.drawImage(baseToDraw, baseX, baseY, 500, 100, null);
 
-        // overlays
+        // ================= OVERLAYS =================
         for (Anomaly a : overlays) {
             a.render(g2d, this);
         }
 
-        // player
+        // ================= PLAYER =================
         Image current = moving ? playerWalk : playerIdle;
 
         if (facingRight) {
@@ -186,7 +239,7 @@ public class GamePanel extends JPanel implements Runnable, KeyListener {
             g2d.drawImage(current, playerX + 32, playerY, -40, 60, null);
         }
 
-        // period UI
+        // ================= PERIOD =================
         switch (currentPeriod) {
             case 0 -> periodSign = new ImageIcon("assets/period0.png").getImage();
             case 1 -> periodSign = new ImageIcon("assets/period1.png").getImage();
@@ -199,17 +252,21 @@ public class GamePanel extends JPanel implements Runnable, KeyListener {
 
         g.drawImage(periodSign, 0, baseY, 500, 100, null);
 
-        // arrows
-        if (nearRightEnd) {
-            g.drawImage(arrowRight, 0, baseY - 40, 500, 100, null);
-        }
+        // ================= ARROWS =================
+        if (nearRightEnd) g.drawImage(arrowRight, 0, baseY - 40, 500, 100, null);
+        if (nearLeftEnd && currentPeriod > 0) g.drawImage(arrowLeft, 0, baseY - 40, 500, 100, null);
 
-        if (nearLeftEnd && currentPeriod > 0) {
-            g.drawImage(arrowLeft, 0, baseY - 40, 500, 100, null);
+        // ================= FADE =================
+        if (transitioning) {
+
+            int alpha = Math.min(255, transitionAlpha);
+
+            g.setColor(new Color(0, 0, 0, alpha));
+            g.fillRect(0, 0, WIDTH, HEIGHT);
         }
     }
 
-    // ================= KEY INPUT =================
+    // ================= INPUT =================
     @Override
     public void keyPressed(KeyEvent e) {
 
@@ -220,58 +277,20 @@ public class GamePanel extends JPanel implements Runnable, KeyListener {
 
             boolean forward = nearRightEnd;
             boolean backward = nearLeftEnd;
-            boolean anomaly = hasAnomaly();
 
-            // ================= WIN CONDITION =================
             if (currentPeriod >= 6) {
-
                 gameThread = null;
-
+                sound.stopFootsteps();
                 new EndScreen();
-
-                if (window != null) {
-                    window.dispose();
-                }
-
+                if (window != null) window.dispose();
                 return;
             }
 
-            // ================= PERIOD 0 =================
-            if (currentPeriod == 0) {
-
-                if (forward) {
-                    currentPeriod = 1;
-                    playerX = 20;
-                    AnomalyManager.generate(this, currentPeriod);
-                }
-
-                return;
-            }
-
-            // ================= FORWARD =================
-            if (forward) {
-
-                if (!anomaly) {
-                    currentPeriod++;
-                } else {
-                    currentPeriod = 0;
-                }
-
-                playerX = 20;
-                AnomalyManager.generate(this, currentPeriod);
-            }
-
-            // ================= BACKWARD =================
-            if (backward) {
-
-                if (anomaly) {
-                    currentPeriod++;
-                } else {
-                    currentPeriod = 0;
-                }
-
-                playerX = 200;
-                AnomalyManager.generate(this, currentPeriod);
+            if (forward || backward) {
+                transitioning = true;
+                transitionAlpha = 0;
+                transitionForward = forward;
+                transitionBackward = backward;
             }
         }
     }

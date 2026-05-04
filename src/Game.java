@@ -8,3 +8,5 @@ public class Game {
         new IntroScreen();
     }
 }
+
+// sincere thanks to stack overflow and reddit
