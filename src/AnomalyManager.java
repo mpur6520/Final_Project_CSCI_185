@@ -23,7 +23,7 @@ public class AnomalyManager {
         else if (baseRoll < 70) {
             panel.currentBase = BaseState.EYES;
         }
-        else if (baseRoll < 85) {
+        else if (baseRoll < 88) {
             panel.currentBase = BaseState.NO_BATHROOM;
         }
         else if (baseRoll < 98) {
