@@ -54,7 +54,8 @@ public class IntroScreen extends JFrame {
                         "-> Go BACKWARD (LEFT)\n\n" +
                         "Wrong decision = RESET TO 0\n\n\n" +
                         "Period 0 is always normal.\n\n" +
-                        "You have 6 periods to get through.\n\n"
+                        "There are 6 periods.\n\n" +
+                        "Use arrow keys to move and Z to confirm."
         );
 
         rules.setEditable(false);
