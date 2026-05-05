@@ -20,7 +20,6 @@ public class SoundPlayer {
     // ================= LOADER =================
     private Clip loadClip(String path) {
         try {
-
             AudioInputStream audioInputStream =
                     AudioSystem.getAudioInputStream(new File(path));
 
